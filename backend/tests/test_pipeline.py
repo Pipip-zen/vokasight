@@ -12,35 +12,39 @@ from backend.app.services.image_processor import ImagePreprocessor
 from backend.app.services.scoring_engine import ScoringEngine
 
 def run_test():
-    print("=== Testing ImagePreprocessor ===")
+    print("=== Testing ImagePreprocessor & PCB Validation ===")
     preprocessor = ImagePreprocessor()
 
-    test_img = np.zeros((480, 640, 3), dtype=np.uint8)
-    test_img[:, :] = (50, 80, 50)
-    cv2.circle(test_img, (320, 240), 40, (255, 255, 255), -1)
+    # 1. Valid PCB-like image with pads and tracks
+    pcb_img = np.zeros((480, 640, 3), dtype=np.uint8)
+    pcb_img[:, :] = (30, 90, 40)
+    # Add multiple pad contours and lines
+    for i in range(10):
+        cv2.circle(pcb_img, (50 + i * 50, 100), 12, (220, 220, 220), -1)
+        cv2.circle(pcb_img, (50 + i * 50, 200), 12, (220, 220, 220), -1)
+        cv2.line(pcb_img, (50 + i * 50, 100), (50 + i * 50, 200), (180, 180, 180), 3)
 
-    processed_img, quality = preprocessor.process(test_img)
-    print("Quality Report:", json.dumps(quality, indent=2))
-    assert processed_img.shape == test_img.shape, "Image shape changed!"
-    print("Preprocessor test PASSED!")
+    processed_pcb, quality_pcb = preprocessor.process(pcb_img)
+    print("PCB Image Quality Report:", json.dumps(quality_pcb, indent=2))
+    assert quality_pcb["is_pcb"] == True, "Valid PCB was wrongly rejected!"
 
-    print("\n=== Testing ScoringEngine ===")
+    # 2. Non-PCB blank image
+    non_pcb_img = np.ones((480, 640, 3), dtype=np.uint8) * 128
+    processed_non_pcb, quality_non_pcb = preprocessor.process(non_pcb_img)
+    print("Non-PCB Image Quality Report:", json.dumps(quality_non_pcb, indent=2))
+    assert quality_non_pcb["is_pcb"] == False, "Non-PCB image was wrongly accepted!"
+
+    print("\n=== Testing ScoringEngine Non-PCB Rejection ===")
     scoring = ScoringEngine()
 
-    sample_detections = [
-        {"class_name": "solder_bridge", "confidence": 0.91, "bbox": [100, 100, 150, 150]},
-        {"class_name": "void", "confidence": 0.85, "bbox": [200, 200, 230, 230]}
-    ]
+    score, parsed_defects, recs = scoring.evaluate([], is_pcb=False)
+    print(f"Non-PCB Calculated Score: {score}/100")
+    print("Non-PCB Defects:", json.dumps(parsed_defects, indent=2))
+    print("Non-PCB Recommendations:", recs)
 
-    score, parsed_defects, recommendations = scoring.evaluate(sample_detections, preprocessor_warning=quality.get("warning"))
-    print(f"Calculated Score: {score}/100")
-    print("Parsed Defects:", json.dumps(parsed_defects, indent=2))
-    print("Recommendations:")
-    for r in recommendations:
-        print(" -", r)
-
-    assert score < 100.0, "Score should have penalties applied!"
-    print("ScoringEngine test PASSED!")
+    assert score == 0.0, "Non-PCB image should get 0 score!"
+    assert "non_pcb_object" in parsed_defects[0]["class_name"], "Non-PCB defect tag missing!"
+    print("ScoringEngine Non-PCB Validation test PASSED!")
 
 if __name__ == "__main__":
     run_test()

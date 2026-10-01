@@ -5,8 +5,8 @@ from typing import Tuple, Dict, Any
 class ImagePreprocessor:
     """
     OpenCV Preprocessing Engine for VokaSight Hardware Inspection.
-    Performs contrast enhancement (CLAHE), specular glare reduction, 
-    and image normalization prior to AI object detection.
+    Performs contrast enhancement (CLAHE), specular glare reduction,
+    lighting quality checks, and PCB structure validation.
     """
 
     def __init__(self, clip_limit: float = 2.0, tile_grid_size: Tuple[int, int] = (8, 8)):
@@ -15,10 +15,6 @@ class ImagePreprocessor:
         self.clahe = cv2.createCLAHE(clipLimit=self.clip_limit, tileGridSize=self.tile_grid_size)
 
     def apply_clahe(self, image: np.ndarray) -> np.ndarray:
-        """
-        Applies Contrast Limited Adaptive Histogram Equalization (CLAHE)
-        on the Luminance (L) channel in LAB color space to preserve color balance.
-        """
         lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)
         l_clahe = self.clahe.apply(l)
@@ -26,27 +22,30 @@ class ImagePreprocessor:
         return cv2.cvtColor(lab_clahe, cv2.COLOR_LAB2BGR)
 
     def reduce_glare(self, image: np.ndarray, threshold: int = 230) -> np.ndarray:
-        """
-        Detects specular highlights (glare) on shiny solder joints/metals 
-        and reduces glare using fast telea inpainting.
-        """
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        # Create mask of overexposed bright spots
         _, glare_mask = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
-        
-        # Dilate mask slightly to cover glare edges
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
         glare_mask = cv2.dilate(glare_mask, kernel, iterations=1)
-
-        # Inpaint glare regions using neighboring color information
         inpainted = cv2.inpaint(image, glare_mask, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
         return inpainted
 
+    def validate_pcb_structure(self, image: np.ndarray) -> bool:
+        """
+        Validates if the uploaded image contains valid circuit board / hardware structures 
+        (copper traces, solder pads, pins) using Canny edge & contour density analysis.
+        """
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        edges = cv2.Canny(blurred, 30, 100)
+        
+        edge_density = float(np.sum(edges > 0) / edges.size)
+        contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # A valid PCB has noticeable structural contours and edge density
+        is_pcb = edge_density >= 0.003 or len(contours) >= 5
+        return is_pcb
+
     def check_lighting_quality(self, image: np.ndarray) -> Dict[str, Any]:
-        """
-        Evaluates image lighting conditions to catch extreme failure states
-        (too dark or excessive glare).
-        """
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         mean_brightness = float(np.mean(gray))
         overexposed_ratio = float(np.sum(gray > 240) / gray.size)
@@ -60,25 +59,21 @@ class ImagePreprocessor:
         elif overexposed_ratio > 0.15:
             warning_message = "Excessive glare detected on board. Please turn off direct flash or adjust camera angle."
 
+        is_pcb = self.validate_pcb_structure(image)
+        if not is_pcb and not warning_message:
+            warning_message = "PCB / Hardware object not detected. Please upload a clear photo of a circuit board or practicum module."
+
         return {
             "mean_brightness": round(mean_brightness, 2),
             "overexposed_ratio": round(overexposed_ratio, 4),
             "underexposed_ratio": round(underexposed_ratio, 4),
-            "is_suboptimal": is_suboptimal,
+            "is_suboptimal": is_suboptimal or not is_pcb,
+            "is_pcb": is_pcb,
             "warning": warning_message
         }
 
     def process(self, image: np.ndarray) -> Tuple[np.ndarray, Dict[str, Any]]:
-        """
-        Full pre-processing pipeline execution.
-        Returns normalized image and quality assessment report.
-        """
         quality = self.check_lighting_quality(image)
-        
-        # 1. Reduce Glare
         deglared = self.reduce_glare(image)
-        
-        # 2. Enhance Contrast via CLAHE
         enhanced = self.apply_clahe(deglared)
-        
         return enhanced, quality

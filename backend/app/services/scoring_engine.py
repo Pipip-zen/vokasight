@@ -6,7 +6,6 @@ class ScoringEngine:
     along with actionable repair recommendations for vocational students.
     """
 
-    # Defect penalty weights
     DEFECT_PENALTIES = {
         "short_circuit": 25.0,
         "short": 25.0,
@@ -33,7 +32,6 @@ class ScoringEngine:
         "defect": 15.0
     }
 
-    # Actionable repair recommendations
     RECOMMENDATIONS_MAP = {
         "short_circuit": "Short circuit detected between adjacent copper traces/pads. Scrape excess copper or remove solder bridge using solder wick.",
         "short": "Short circuit detected on PCB trace. Clean unwanted connection with solder braid or precision knife.",
@@ -60,7 +58,26 @@ class ScoringEngine:
         "defect": "PCB / soldering defect detected. Re-inspect pad connection and touch up assembly."
     }
 
-    def evaluate(self, detections: List[Dict[str, Any]], preprocessor_warning: str = None) -> Tuple[float, List[Dict[str, Any]], List[str]]:
+    def evaluate(
+        self,
+        detections: List[Dict[str, Any]],
+        preprocessor_warning: str = None,
+        is_pcb: bool = True
+    ) -> Tuple[float, List[Dict[str, Any]], List[str]]:
+        
+        # Non-PCB validation failure state (PRD 2 Section 9)
+        if not is_pcb and not detections:
+            recommendations = [
+                "Objek PCB / Hardware tidak terdeteksi. Pastikan foto memperlihatkan papan rangkaian yang jelas (bukan objek acak)."
+            ]
+            parsed_defects = [{
+                "class_name": "non_pcb_object",
+                "confidence": 1.0,
+                "penalty": 100.0,
+                "bbox": []
+            }]
+            return 0.0, parsed_defects, recommendations
+
         base_score = 100.0
         parsed_defects = []
         recommendations = []
@@ -71,11 +88,9 @@ class ScoringEngine:
             confidence = float(det.get("confidence", 0.0))
             bbox = det.get("bbox", [])
 
-            # Ignore good joints/traces from penalties
             if "good" in raw_class or "ok" in raw_class or "normal" in raw_class:
                 continue
 
-            # Match penalty key
             penalty = 15.0
             matched_key = "defect"
             for key, p_val in self.DEFECT_PENALTIES.items():

@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, status
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -16,11 +16,11 @@ from src.backend.scoring_engine import ScoringEngine
 # Initialize FastAPI app
 app = FastAPI(
     title="VokaSight Inspection Engine API",
-    description="Vision-Based Automated Hardware & Soldering Defect Inspection Engine for Vocational Practicum",
-    version="1.0.0"
+    description="Vision-Based Automated Hardware & Soldering Defect Inspection Engine for Vocational Lab Practicum (PRD 2 Spec)",
+    version="1.1.0"
 )
 
-# Enable CORS for mobile/web frontends
+# Enable CORS for Flutter mobile client & Streamlit web client
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -63,21 +63,44 @@ def get_yolo_model():
                 yolo_model = None
     return yolo_model
 
+# In-memory storage for inspection tasks (PRD 2 Async Task Queue)
+TASKS_DB: Dict[str, Dict[str, Any]] = {}
+
+# Catalog of Practicum Modules (PRD 2 Section 7.2)
+PRACTICUM_MODULES = [
+    {
+        "id": "mod-soldering-basic",
+        "name": "Praktikum Soldering & Desoldering Dasar",
+        "description": "Inspeksi kualitas sambungan solder pad, void, dan deteksi solder bridge pada board latihan."
+    },
+    {
+        "id": "mod-min-sys-avr",
+        "name": "Praktikum Perakitan Minimum System AVR / Arduino",
+        "description": "Verifikasi orientasi IC (pin 1 notch), polaritas kapapasitor elko/dioda, dan solder pin header."
+    },
+    {
+        "id": "mod-power-supply",
+        "name": "Praktikum Modul Regulator Catu Daya (Power Supply)",
+        "description": "Pemeriksaan jalur kompoten regulator, dioda bridge, trafo, dan jalur sambungan PCB."
+    }
+]
+
 # Schemas
-class StudentAuthRequest(BaseModel):
-    student_id: str
-    full_name: Optional[str] = "Student"
+class ModuleItem(BaseModel):
+    id: str
+    name: str
+    description: str
 
-class StudentAuthResponse(BaseModel):
-    student_id: str
-    full_name: str
-    message: str
-    session_id: str
-
-class InspectionResponse(BaseModel):
+class InspectionTaskResponse(BaseModel):
     task_id: str
-    student_id: str
-    module_type: str
+    status: str
+    module_id: str
+    created_at: str
+
+class InspectionResultDetail(BaseModel):
+    task_id: str
+    module_id: str
+    status: str
     score: float
     lighting_warning: Optional[str] = None
     detected_defects: List[Dict[str, Any]]
@@ -91,75 +114,115 @@ def health_check():
         "status": "online",
         "service": "VokaSight MVP API",
         "yolo_model_available": model_loaded,
-        "weights_path": MODEL_WEIGHTS_PATH
+        "weights_path": MODEL_WEIGHTS_PATH,
+        "active_tasks": len(TASKS_DB)
     }
 
-@app.post("/api/v1/auth/student", response_model=StudentAuthResponse)
-def student_auth(req: StudentAuthRequest):
-    if not req.student_id or len(req.student_id.strip()) < 3:
-        raise HTTPException(status_code=400, detail="Invalid Student ID (NIM). Must be at least 3 characters.")
-    
-    session_id = str(uuid.uuid4())
-    return StudentAuthResponse(
-        student_id=req.student_id.strip(),
-        full_name=req.full_name or "Student",
-        message="Authentication successful. Ready for inspection session.",
-        session_id=session_id
-    )
+@app.get("/api/v1/modules", response_model=List[ModuleItem])
+def get_practicum_modules():
+    """Returns list of active practicum modules for Zero-Auth selection (PRD 2 Section 7.2)."""
+    return PRACTICUM_MODULES
 
-@app.post("/api/v1/inspect/hardware", response_model=InspectionResponse)
-async def inspect_hardware(
+def process_inspection_task(task_id: str, image: np.ndarray, module_id: str):
+    """Background task executing OpenCV CLAHE + Glare Reduction + YOLOv8 Inference + Scoring."""
+    try:
+        # 1. Preprocessing
+        processed_img, quality_report = preprocessor.process(image)
+
+        # 2. YOLOv8 Detection
+        model = get_yolo_model()
+        detections = []
+
+        if model is not None:
+            results = model.predict(processed_img, conf=0.35)
+            for r in results:
+                for box in r.boxes:
+                    cls_id = int(box.cls[0])
+                    cls_name = model.names[cls_id]
+                    conf = float(box.conf[0])
+                    xyxy = [float(x) for x in box.xyxy[0]]
+                    detections.append({
+                        "class_name": cls_name,
+                        "confidence": conf,
+                        "bbox": xyxy
+                    })
+
+        # 3. Scoring
+        warning = quality_report.get("warning") if quality_report.get("is_suboptimal") else None
+        score, parsed_defects, recommendations = scoring_engine.evaluate(detections, preprocessor_warning=warning)
+
+        # Update DB Record
+        TASKS_DB[task_id].update({
+            "status": "completed",
+            "score": score,
+            "lighting_warning": warning,
+            "detected_defects": parsed_defects,
+            "recommendations": recommendations,
+            "processed_at": datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        TASKS_DB[task_id].update({
+            "status": "failed",
+            "error_message": str(e),
+            "score": 0.0,
+            "detected_defects": [],
+            "recommendations": ["Inspection failed due to an image processing error."],
+            "processed_at": datetime.utcnow().isoformat() + "Z"
+        })
+
+@app.post("/api/v1/inspections", response_model=InspectionTaskResponse, status_code=status.HTTP_202_ACCEPTED)
+async def submit_inspection(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    student_id: str = Form(...),
-    module_type: str = Form("hardware_soldering")
+    module_id: str = Form("mod-soldering-basic")
 ):
-    # 1. Read uploaded image
+    """Async inspection submission (PRD 2 Section 7.3 & 7.4)."""
     contents = await file.read()
     nparr = np.frombuffer(contents, np.uint8)
     image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
     if image is None:
-        raise HTTPException(status_code=400, detail="Invalid image file uploaded.")
-
-    # 2. Preprocess image (CLAHE, Glare Reduction, Quality Check)
-    processed_img, quality_report = preprocessor.process(image)
-
-    # 3. Perform AI Defect Detection
-    model = get_yolo_model()
-    detections = []
-
-    if model is not None:
-        results = model.predict(processed_img, conf=0.35)
-        for r in results:
-            for box in r.boxes:
-                cls_id = int(box.cls[0])
-                cls_name = model.names[cls_id]
-                conf = float(box.conf[0])
-                xyxy = [float(x) for x in box.xyxy[0]]
-                detections.append({
-                    "class_name": cls_name,
-                    "confidence": conf,
-                    "bbox": xyxy
-                })
-    else:
-        # Fallback simulation if model weights not yet trained
-        # (Allows testing API endpoints prior to training completion)
-        detections = []
-
-    # 4. Scoring & Recommendation Engine
-    warning = quality_report.get("warning") if quality_report.get("is_suboptimal") else None
-    score, parsed_defects, recommendations = scoring_engine.evaluate(detections, preprocessor_warning=warning)
+        raise HTTPException(status_code=400, detail="Invalid image file format. Upload JPG or PNG.")
 
     task_id = str(uuid.uuid4())
-    timestamp = datetime.utcnow().isoformat() + "Z"
+    created_at = datetime.utcnow().isoformat() + "Z"
 
-    return InspectionResponse(
+    TASKS_DB[task_id] = {
+        "task_id": task_id,
+        "module_id": module_id,
+        "status": "processing",
+        "score": 0.0,
+        "lighting_warning": None,
+        "detected_defects": [],
+        "recommendations": [],
+        "created_at": created_at,
+        "processed_at": created_at
+    }
+
+    # Queue async processing
+    background_tasks.add_task(process_inspection_task, task_id, image, module_id)
+
+    return InspectionTaskResponse(
         task_id=task_id,
-        student_id=student_id,
-        module_type=module_type,
-        score=score,
-        lighting_warning=warning,
-        detected_defects=parsed_defects,
-        recommendations=recommendations,
-        processed_at=timestamp
+        status="processing",
+        module_id=module_id,
+        created_at=created_at
+    )
+
+@app.get("/api/v1/inspections/{task_id}", response_model=InspectionResultDetail)
+def get_inspection_result(task_id: str):
+    """Polling endpoint returning status, score, defects, and recommendations (PRD 2 Section 7.5)."""
+    if task_id not in TASKS_DB:
+        raise HTTPException(status_code=404, detail="Inspection task not found.")
+
+    task = TASKS_DB[task_id]
+    return InspectionResultDetail(
+        task_id=task["task_id"],
+        module_id=task["module_id"],
+        status=task["status"],
+        score=task["score"],
+        lighting_warning=task.get("lighting_warning"),
+        detected_defects=task.get("detected_defects", []),
+        recommendations=task.get("recommendations", []),
+        processed_at=task.get("processed_at", task["created_at"])
     )

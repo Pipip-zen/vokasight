@@ -5,14 +5,13 @@ import requests
 import json
 import time
 from PIL import Image
-import io
 
 from src.preprocessing.image_processor import ImagePreprocessor
 from src.backend.scoring_engine import ScoringEngine
-from src.backend.main import get_yolo_model, find_weights, preprocessor, scoring_engine
+from src.backend.main import get_yolo_model, find_weights, preprocessor, scoring_engine, PRACTICUM_MODULES
 
 st.set_page_config(
-    page_title="VokaSight - Hardware Defect Inspection",
+    page_title="VokaSight - Hardware Defect Inspection (PRD 2)",
     page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -57,17 +56,32 @@ st.markdown("""
         border-radius: 4px;
         margin-bottom: 0.8rem;
     }
+    .zero-auth-badge {
+        background-color: #EFF6FF;
+        color: #1D4ED8;
+        padding: 0.3rem 0.6rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Sidebar - Student Auth
+# Sidebar - PRD 2 Module Selection & Zero Auth
 st.sidebar.image("https://img.icons8.com/color/96/integrated-circuit.png", width=70)
 st.sidebar.title("VokaSight Student Portal")
-st.sidebar.caption("Vision-Based Hardware Inspection")
+st.sidebar.markdown("<span class='zero-auth-badge'>⚡ Zero-Auth Mode Enabled</span>", unsafe_allow_html=True)
+st.sidebar.caption("PRD 2 Spec: Direct Access & Async AI Pipeline")
 
-student_id = st.sidebar.text_input("Student ID (NIM)", value="5324600006")
-student_name = st.sidebar.text_input("Student Name", value="Rian Electronics Student")
-module_type = st.sidebar.selectbox("Practicum Module", ["Hardware Soldering Inspection", "PCB Component Polarity", "Wiring Route Verification"])
+# PRD 2 Module Selection
+module_options = {mod["name"]: mod["id"] for mod in PRACTICUM_MODULES}
+selected_module_name = st.sidebar.selectbox("🎯 Target Practicum Module", list(module_options.keys()))
+selected_module_id = module_options[selected_module_name]
+
+# Show selected module description
+for mod in PRACTICUM_MODULES:
+    if mod["id"] == selected_module_id:
+        st.sidebar.info(f"**Module Description:**\n{mod['description']}")
 
 st.sidebar.divider()
 st.sidebar.markdown("### ⚙️ Engine Status")
@@ -75,35 +89,36 @@ model_path = find_weights()
 model = get_yolo_model()
 
 if model is not None:
-    st.sidebar.success(f"YOLOv8 Model Loaded\n\n`{model_path}`")
+    st.sidebar.success(f"YOLOv8-Nano Model Active\n\n`{model_path}`")
 else:
-    st.sidebar.warning("Model running in heuristic/simulated mode (Weights pending)")
+    st.sidebar.warning("Model running in heuristic fallback mode")
 
 st.sidebar.divider()
-st.sidebar.info("💡 **Hackathon Demo Mode**: Upload a PCB photo or take a photo with your webcam to test real-time inspection.")
+st.sidebar.markdown("📦 **GitHub Repository:**")
+st.sidebar.markdown("[github.com/Pipip-zen/vokasight.git](https://github.com/Pipip-zen/vokasight.git)")
 
-# Main Interface
+# Main Header
 st.markdown("<div class='main-header'>🔍 VokaSight Hardware Inspection Engine</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub-header'>Automated Soldering & Assembly Quality Assessment for Vocational Practicum</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-header'>Automated Soldering & Assembly Quality Assessment (PRD 2 Specification)</div>", unsafe_allow_html=True)
 
 col1, col2 = st.columns([1, 1])
 
 uploaded_file = None
 
 with col1:
-    st.subheader("1. Image Capture / Upload")
-    input_method = st.radio("Select Input Source", ["Upload Image File", "Use Device Camera"], horizontal=True)
+    st.subheader("1. Gallery / Camera Image Input")
+    input_method = st.radio("Select Input Source", ["Gallery Photo Upload (PRD 2 Spec)", "Live Webcam Capture"], horizontal=True)
 
-    if input_method == "Upload Image File":
-        uploaded_file = st.file_uploader("Upload PCB Photo", type=["jpg", "jpeg", "png"])
+    if input_method == "Gallery Photo Upload (PRD 2 Spec)":
+        uploaded_file = st.file_uploader("Choose PCB Image from Device Gallery", type=["jpg", "jpeg", "png"])
     else:
-        uploaded_file = st.camera_input("Take PCB Photo")
+        uploaded_file = st.camera_input("Capture PCB Photo")
 
     if uploaded_file is not None:
         file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
         image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-        st.image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), caption="Original Image", use_container_width=True)
+        st.image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), caption="Uploaded PCB Photo", use_container_width=True)
 
 with col2:
     st.subheader("2. Inspection Results & Feedback")
@@ -144,26 +159,26 @@ with col2:
                         cv2.putText(annotated_img, f"{cls_name} {conf:.2f}", (x1, max(15, y1 - 10)),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
             
-            # 3. Scoring & Recommendations
+            # 3. Penalty-Based Scoring (PRD 2 Spec)
             warning = quality.get("warning") if quality.get("is_suboptimal") else None
             score, parsed_defects, recommendations = scoring_engine.evaluate(detections, preprocessor_warning=warning)
             latency = round((time.time() - start_time) * 1000, 1)
 
             # Tab View for Visualizations
-            tab1, tab2 = st.tabs(["🎯 AI Detection Overlay", "🔬 OpenCV CLAHE Image"])
+            tab1, tab2 = st.tabs(["🎯 AI Defect Bounding Boxes", "🔬 OpenCV CLAHE Image"])
             with tab1:
                 st.image(cv2.cvtColor(annotated_img, cv2.COLOR_BGR2RGB), caption=f"Defect Overlay ({latency} ms)", use_container_width=True)
             with tab2:
                 st.image(cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB), caption="CLAHE Contrast & Glare Normalized", use_container_width=True)
 
-            # Score Card Display
+            # Penalty Score Card Display (PRD 2 Section 7.5)
             st.markdown("---")
-            score_color = "#16A34A" if score >= 85 else "#CA8A04" if score >= 60 else "#DC2626"
+            score_color = "#16A34A" if score >= 80 else "#CA8A04" if score >= 60 else "#DC2626"
             st.markdown(f"""
             <div class='score-card'>
-                <div style='color: #64748B; font-weight: 600;'>AUTOMATED PRACTICUM SCORE</div>
+                <div style='color: #64748B; font-weight: 600;'>PENALTY-BASED SCORE (PRD 2)</div>
                 <div class='score-number' style='color: {score_color};'>{score} / 100</div>
-                <div style='color: #475569; font-size: 0.9rem;'>Student NIM: {student_id} | Latency: {latency} ms</div>
+                <div style='color: #475569; font-size: 0.9rem;'>Module: {selected_module_id} | Latency: {latency} ms</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -171,18 +186,18 @@ with col2:
             if warning:
                 st.markdown(f"<div class='warn-box'>⚠️ <b>Lighting Alert:</b> {warning}</div>", unsafe_allow_html=True)
 
-            # Recommendations List
-            st.markdown("### 📋 Instant Repair Recommendations")
+            # Actionable Repair Recommendations (PRD 2 Section 7.5)
+            st.markdown("### 📋 Actionable Repair Recommendations")
             for rec in recommendations:
                 st.markdown(f"<div class='rec-box'>💡 {rec}</div>", unsafe_allow_html=True)
 
-            # Defect Table Breakdown
+            # Defect Breakdown Table
             if parsed_defects:
-                st.markdown("### 🔍 Detected Defects Breakdown")
+                st.markdown("### 🔍 Detected Defect Breakdown & Penalties")
                 st.table(parsed_defects)
 
     else:
-        st.info("👈 Please upload or capture a PCB photo on the left panel to trigger automatic inspection.")
+        st.info("👈 Choose a practicum module and upload a PCB photo to analyze.")
 
 st.divider()
-st.caption("VokaSight MVP Engine | Hackathon Prototype | Dual-Mode Vocational Lab Inspection Platform")
+st.caption("VokaSight MVP Engine | PRD 2 Architecture | GitHub: https://github.com/Pipip-zen/vokasight.git")

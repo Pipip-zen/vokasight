@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import requests
 import time
 from fastapi.testclient import TestClient
 from src.backend.main import app
@@ -14,15 +13,14 @@ def test_api_endpoints():
     print("Health check response:", response.json())
     assert response.status_code == 200, "Health check failed!"
 
-    print("\n=== Testing POST /api/v1/auth/student ===")
-    auth_payload = {"student_id": "5324600006", "full_name": "Rian Hardware Student"}
-    response = client.post("/api/v1/auth/student", json=auth_payload)
-    print("Auth status code:", response.status_code)
-    print("Auth response:", response.json())
-    assert response.status_code == 200, "Auth failed!"
+    print("\n=== Testing PRD 2 GET /api/v1/modules ===")
+    response = client.get("/api/v1/modules")
+    print("Modules status code:", response.status_code)
+    modules = response.json()
+    print("Available Practicum Modules:", len(modules))
+    assert response.status_code == 200 and len(modules) > 0, "Modules catalog failed!"
 
-    print("\n=== Testing POST /api/v1/inspect/hardware ===")
-    # Generate test image
+    print("\n=== Testing PRD 2 Async POST /api/v1/inspections ===")
     test_img = np.zeros((480, 640, 3), dtype=np.uint8)
     test_img[:, :] = (30, 90, 40)
     cv2.circle(test_img, (320, 240), 30, (200, 200, 200), -1)
@@ -31,17 +29,30 @@ def test_api_endpoints():
     img_bytes = img_encoded.tobytes()
 
     files = {'file': ('test_board.jpg', img_bytes, 'image/jpeg')}
-    data = {'student_id': '5324600006', 'module_type': 'hardware_soldering'}
+    data = {'module_id': 'mod-soldering-basic'}
 
-    response = client.post("/api/v1/inspect/hardware", files=files, data=data)
-    print("Inspection status code:", response.status_code)
-    res_json = response.json()
-    print("Inspection response keys:", list(res_json.keys()))
-    print(f"Task ID: {res_json.get('task_id')}")
-    print(f"Score: {res_json.get('score')}")
-    print(f"Recommendations: {res_json.get('recommendations')}")
-    assert response.status_code == 200, "Hardware inspection failed!"
-    print("\nAll FastAPI Endpoint Tests PASSED!")
+    response = client.post("/api/v1/inspections", files=files, data=data)
+    print("Async Submit status code:", response.status_code)
+    submit_res = response.json()
+    print("Submit response:", submit_res)
+    task_id = submit_res["task_id"]
+    assert response.status_code == 202, "Async submit failed!"
+
+    print(f"\n=== Testing PRD 2 Polling GET /api/v1/inspections/{task_id} ===")
+    poll_res = None
+    for _ in range(5):
+        poll_resp = client.get(f"/api/v1/inspections/{task_id}")
+        poll_res = poll_resp.json()
+        if poll_res["status"] == "completed":
+            break
+        time.sleep(0.1)
+
+    print("Polling result status:", poll_res.get("status"))
+    print("Polling result score:", poll_res.get("score"))
+    print("Polling result recommendations:", poll_res.get("recommendations"))
+    assert poll_res.get("status") == "completed", "Polling processing did not complete!"
+
+    print("\nAll PRD 2 FastAPI Endpoint Tests PASSED!")
 
 if __name__ == "__main__":
     test_api_endpoints()

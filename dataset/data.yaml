@@ -1,0 +1,7 @@
+names:
+  0: good_soldering
+  1: solder_bridge
+  2: void
+path: D:\PROYEK MANDIRI\HACKATHON\compvis\dataset
+train: train/images
+val: valid/images

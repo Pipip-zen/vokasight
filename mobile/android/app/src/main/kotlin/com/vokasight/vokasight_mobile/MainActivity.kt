@@ -1,0 +1,5 @@
+package com.vokasight.vokasight_mobile
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity()

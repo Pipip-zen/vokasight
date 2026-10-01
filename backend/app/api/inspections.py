@@ -96,10 +96,12 @@ def process_inspection_task(task_id: str, image: np.ndarray, module_id: str, rob
         conn.close()
 
 @router.post("/inspections", response_model=InspectionTaskResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post("/inspections/submit", response_model=InspectionTaskResponse, status_code=status.HTTP_202_ACCEPTED)
 async def submit_inspection(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     module_id: str = Form("mod-soldering-basic"),
+    student_id: Optional[str] = Form(None),
     roboflow_key: Optional[str] = Form(None)
 ):
     contents = await file.read()
@@ -127,6 +129,8 @@ async def submit_inspection(
         task_id=task_id,
         status="processing",
         module_id=module_id,
+        student_id=student_id,
+        message="Foto berhasil diunggah. Analisis AI sedang berjalan...",
         created_at=created_at
     )
 
@@ -144,6 +148,9 @@ def get_inspection_result(task_id: str):
     if not row:
         raise HTTPException(status_code=404, detail="Inspection task not found.")
 
+    recs = json.loads(row[6]) if row[6] else []
+    recs_text = "\n".join([f"• {r}" for r in recs]) if recs else None
+
     return InspectionResultDetail(
         task_id=row[0],
         module_id=row[1],
@@ -151,6 +158,8 @@ def get_inspection_result(task_id: str):
         score=row[3],
         lighting_warning=row[4],
         detected_defects=json.loads(row[5]) if row[5] else [],
-        recommendations=json.loads(row[6]) if row[6] else [],
+        recommendations=recs,
+        recommendations_text=recs_text,
         processed_at=row[8] or row[7]
     )
+

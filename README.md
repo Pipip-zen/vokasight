@@ -31,6 +31,15 @@ uvicorn backend.main:app --host 0.0.0.0 --port 8000
 
 ```
 compvis/
+├── mobile/                     # Flutter Mobile App (BLoC/Cubit, Dio, Offline Cache)
+│   ├── lib/
+│   │   ├── bloc/               # State management (module, inspection, history)
+│   │   ├── core/               # API client, network, app colors
+│   │   ├── models/             # Data models (Module, Task, InspectionResult, History)
+│   │   ├── services/           # ApiService & LocalStorageService
+│   │   ├── views/              # 5 Core Screens (Home, Upload, Scanning, Result, History)
+│   │   └── main.dart
+│   └── test/                   # Unit & Widget tests
 ├── backend/                    # FastAPI Backend API Server (Serves Mobile Apps & Web Clients)
 │   ├── app/
 │   │   ├── api/                # REST API Routers & Endpoints
@@ -64,6 +73,7 @@ compvis/
 ├── vokasight.db                # SQLite Persistent Database
 ├── .gitignore
 └── README.md
+
 ```
 
 ---
@@ -96,3 +106,22 @@ streamlit run demo_ui/app.py
 python backend/tests/test_pipeline.py
 python backend/tests/test_api.py
 ```
+
+### 4. Train YOLOv8-Nano Model
+```bash
+# Train on custom Roboflow dataset
+python ml_engine/train.py --roboflow_key YOUR_ROBOFLOW_API_KEY --epochs 50 --batch 16
+```
+
+### 5. Run Flutter Mobile App (Android / iOS / Windows)
+```bash
+cd mobile
+flutter pub get
+
+# Jalankan di Emulator Android (default: http://10.0.2.2:8000/api/v1)
+flutter run
+
+# Atau jalankan dengan Base URL IP Wi-Fi laptop untuk HP Fisik:
+flutter run --dart-define=BASE_URL=http://192.168.1.50:8000/api/v1
+```
+

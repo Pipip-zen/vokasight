@@ -12,7 +12,7 @@ from backend.app.schemas.inspection import InspectionTaskResponse, InspectionRes
 from backend.app.services.image_processor import ImagePreprocessor
 from backend.app.services.scoring_engine import ScoringEngine
 from backend.app.services.roboflow_service import RoboflowHostedInference
-from backend.app.core.config import find_weights, DB_PATH
+from backend.app.core.config import find_module_weights, DB_PATH
 
 router = APIRouter()
 
@@ -20,21 +20,23 @@ preprocessor = ImagePreprocessor()
 scoring_engine = ScoringEngine()
 roboflow_cloud = RoboflowHostedInference()
 
-yolo_model = None
+yolo_models_cache: Dict[str, Any] = {}
 
-def get_yolo_model():
-    global yolo_model
-    if yolo_model is None:
-        weights_path = find_weights()
-        if os.path.exists(weights_path):
-            try:
-                from ultralytics import YOLO
-                yolo_model = YOLO(weights_path)
-                print(f"Loaded trained local YOLOv8 model from {weights_path}")
-            except Exception as e:
-                print(f"Failed to load local YOLO model: {e}")
-                yolo_model = None
-    return yolo_model
+def get_yolo_model_for_module(module_id: str):
+    weights_path = find_module_weights(module_id)
+    if weights_path in yolo_models_cache:
+        return yolo_models_cache[weights_path]
+
+    if os.path.exists(weights_path):
+        try:
+            from ultralytics import YOLO
+            model = YOLO(weights_path)
+            yolo_models_cache[weights_path] = model
+            print(f"Loaded local YOLOv8 model for module {module_id} from {weights_path}")
+            return model
+        except Exception as e:
+            print(f"Failed to load local YOLO model from {weights_path}: {e}")
+    return None
 
 def process_inspection_task(task_id: str, image: np.ndarray, module_id: str, roboflow_key: Optional[str] = None):
     try:
@@ -45,14 +47,14 @@ def process_inspection_task(task_id: str, image: np.ndarray, module_id: str, rob
         # Jalur A: Try Roboflow Hosted API if Key Provided
         cloud_engine = RoboflowHostedInference(api_key=roboflow_key) if roboflow_key else roboflow_cloud
         if cloud_engine.is_configured():
-            cloud_detections = cloud_engine.predict_image(processed_img, confidence=0.35)
+            cloud_detections = cloud_engine.predict_image(processed_img, module_id=module_id, confidence=0.35)
             if cloud_detections is not None:
                 detections = cloud_detections
                 inference_source = "roboflow_hosted_api"
 
         # Jalur B: Local YOLOv8 Fallback if Jalur A not used or failed
         if not detections and inference_source == "local_yolov8":
-            model = get_yolo_model()
+            model = get_yolo_model_for_module(module_id)
             if model is not None:
                 results = model.predict(processed_img, conf=0.35)
                 for r in results:

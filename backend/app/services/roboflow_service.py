@@ -8,27 +8,41 @@ from typing import List, Dict, Any, Optional
 class RoboflowHostedInference:
     """
     Jalur A: Roboflow Hosted Inference API Service.
-    Queries Roboflow Cloud model directly for soldering defects.
+    Supports multi-model querying (Soldering Defect & General PCB Defect Inspection).
     """
 
-    def __init__(self, api_key: Optional[str] = None, model_id: str = "soldering-defect-good-condition", version: int = 1):
+    MODULE_MODEL_MAP = {
+        "mod-soldering-basic": {"workspace": "fyp-fjnfe", "model_id": "soldering-defect-good-condition", "version": 1},
+        "mod-min-sys-avr": {"workspace": "fyp-fjnfe", "model_id": "soldering-defect-good-condition", "version": 1},
+        "mod-power-supply": {"workspace": "fyp-fjnfe", "model_id": "soldering-defect-good-condition", "version": 1},
+        "mod-pcb-defect-general": {"workspace": "nbmachinevision", "model_id": "pcb-defect-vagef", "version": 1}
+    }
+
+    def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("ROBOFLOW_API_KEY")
-        self.model_id = model_id
-        self.version = version
 
     def is_configured(self) -> bool:
         return bool(self.api_key and self.api_key.strip())
 
-    def predict_image(self, image: np.ndarray, confidence: float = 0.35) -> Optional[List[Dict[str, Any]]]:
+    def predict_image(
+        self,
+        image: np.ndarray,
+        module_id: str = "mod-soldering-basic",
+        confidence: float = 0.35
+    ) -> Optional[List[Dict[str, Any]]]:
         if not self.is_configured():
             return None
+
+        model_config = self.MODULE_MODEL_MAP.get(module_id, self.MODULE_MODEL_MAP["mod-soldering-basic"])
+        model_id = model_config["model_id"]
+        version = model_config["version"]
 
         try:
             # Encode image to JPEG base64
             _, buffer = cv2.imencode('.jpg', image)
             img_b64 = base64.b64encode(buffer).decode('utf-8')
 
-            url = f"https://detect.roboflow.com/{self.model_id}/{self.version}"
+            url = f"https://detect.roboflow.com/{model_id}/{version}"
             params = {
                 "api_key": self.api_key.strip(),
                 "confidence": confidence
@@ -39,7 +53,7 @@ class RoboflowHostedInference:
                 params=params,
                 data=img_b64,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
-                timeout=5.0
+                timeout=6.0
             )
 
             if response.status_code == 200:
@@ -66,7 +80,7 @@ class RoboflowHostedInference:
                         "class_name": cls_name,
                         "confidence": conf,
                         "bbox": [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
-                        "source": "roboflow_hosted_api"
+                        "source": f"roboflow_api_{model_id}"
                     })
                 return parsed_detections
             else:

@@ -3,6 +3,8 @@ import io
 import uuid
 import cv2
 import numpy as np
+import sqlite3
+import json
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
@@ -13,14 +15,58 @@ from pydantic import BaseModel
 from src.preprocessing.image_processor import ImagePreprocessor
 from src.backend.scoring_engine import ScoringEngine
 
+DB_PATH = "vokasight.db"
+
+def init_sqlite_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Modules Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS modules (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT
+    );
+    """)
+    
+    # Inspection Tasks Table (PRD 2 Schema)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS inspection_tasks (
+        id TEXT PRIMARY KEY,
+        module_id TEXT,
+        status TEXT NOT NULL,
+        score REAL DEFAULT 0.0,
+        lighting_warning TEXT,
+        detected_defects TEXT DEFAULT '[]',
+        recommendations TEXT DEFAULT '[]',
+        created_at TEXT,
+        processed_at TEXT
+    );
+    """)
+    
+    # Insert default modules if empty
+    cursor.execute("SELECT COUNT(*) FROM modules;")
+    if cursor.fetchone()[0] == 0:
+        default_modules = [
+            ("mod-soldering-basic", "Praktikum Soldering & Desoldering Dasar", "Inspeksi kualitas sambungan solder pad, void, dan deteksi solder bridge pada board latihan."),
+            ("mod-min-sys-avr", "Praktikum Perakitan Minimum System AVR / Arduino", "Verifikasi orientasi IC (pin 1 notch), polaritas kapasitor elko/dioda, dan solder pin header."),
+            ("mod-power-supply", "Praktikum Modul Regulator Catu Daya (Power Supply)", "Pemeriksaan jalur komponen regulator, dioda bridge, trafo, dan jalur sambungan PCB.")
+        ]
+        cursor.executemany("INSERT INTO modules VALUES (?, ?, ?);", default_modules)
+        conn.commit()
+    conn.close()
+
+# Initialize SQLite database
+init_sqlite_db()
+
 # Initialize FastAPI app
 app = FastAPI(
     title="VokaSight Inspection Engine API",
-    description="Vision-Based Automated Hardware & Soldering Defect Inspection Engine for Vocational Lab Practicum (PRD 2 Spec)",
-    version="1.1.0"
+    description="Vision-Based Automated Hardware & Soldering Defect Inspection Engine for Vocational Lab Practicum (PRD 2 SQLite Spec)",
+    version="1.2.0"
 )
 
-# Enable CORS for Flutter mobile client & Streamlit web client
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,11 +75,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize engines
 preprocessor = ImagePreprocessor()
 scoring_engine = ScoringEngine()
 
-# Model placeholder path
 MODEL_WEIGHT_CANDIDATES = [
     os.getenv("YOLO_WEIGHTS", ""),
     "runs/detect/runs/vokasight_soldering/soldering_defect_yolov8n/weights/best.pt",
@@ -63,28 +107,6 @@ def get_yolo_model():
                 yolo_model = None
     return yolo_model
 
-# In-memory storage for inspection tasks (PRD 2 Async Task Queue)
-TASKS_DB: Dict[str, Dict[str, Any]] = {}
-
-# Catalog of Practicum Modules (PRD 2 Section 7.2)
-PRACTICUM_MODULES = [
-    {
-        "id": "mod-soldering-basic",
-        "name": "Praktikum Soldering & Desoldering Dasar",
-        "description": "Inspeksi kualitas sambungan solder pad, void, dan deteksi solder bridge pada board latihan."
-    },
-    {
-        "id": "mod-min-sys-avr",
-        "name": "Praktikum Perakitan Minimum System AVR / Arduino",
-        "description": "Verifikasi orientasi IC (pin 1 notch), polaritas kapapasitor elko/dioda, dan solder pin header."
-    },
-    {
-        "id": "mod-power-supply",
-        "name": "Praktikum Modul Regulator Catu Daya (Power Supply)",
-        "description": "Pemeriksaan jalur kompoten regulator, dioda bridge, trafo, dan jalur sambungan PCB."
-    }
-]
-
 # Schemas
 class ModuleItem(BaseModel):
     id: str
@@ -110,26 +132,33 @@ class InspectionResultDetail(BaseModel):
 @app.get("/health")
 def health_check():
     model_loaded = os.path.exists(MODEL_WEIGHTS_PATH)
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM inspection_tasks;")
+    task_count = cursor.fetchone()[0]
+    conn.close()
+    
     return {
         "status": "online",
         "service": "VokaSight MVP API",
         "yolo_model_available": model_loaded,
         "weights_path": MODEL_WEIGHTS_PATH,
-        "active_tasks": len(TASKS_DB)
+        "total_saved_tasks": task_count,
+        "database": "SQLite (vokasight.db)"
     }
 
 @app.get("/api/v1/modules", response_model=List[ModuleItem])
 def get_practicum_modules():
-    """Returns list of active practicum modules for Zero-Auth selection (PRD 2 Section 7.2)."""
-    return PRACTICUM_MODULES
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, description FROM modules;")
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"id": r[0], "name": r[1], "description": r[2]} for r in rows]
 
 def process_inspection_task(task_id: str, image: np.ndarray, module_id: str):
-    """Background task executing OpenCV CLAHE + Glare Reduction + YOLOv8 Inference + Scoring."""
     try:
-        # 1. Preprocessing
         processed_img, quality_report = preprocessor.process(image)
-
-        # 2. YOLOv8 Detection
         model = get_yolo_model()
         detections = []
 
@@ -147,28 +176,30 @@ def process_inspection_task(task_id: str, image: np.ndarray, module_id: str):
                         "bbox": xyxy
                     })
 
-        # 3. Scoring
         warning = quality_report.get("warning") if quality_report.get("is_suboptimal") else None
         score, parsed_defects, recommendations = scoring_engine.evaluate(detections, preprocessor_warning=warning)
+        processed_at = datetime.utcnow().isoformat() + "Z"
 
-        # Update DB Record
-        TASKS_DB[task_id].update({
-            "status": "completed",
-            "score": score,
-            "lighting_warning": warning,
-            "detected_defects": parsed_defects,
-            "recommendations": recommendations,
-            "processed_at": datetime.utcnow().isoformat() + "Z"
-        })
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+        UPDATE inspection_tasks
+        SET status = 'completed', score = ?, lighting_warning = ?, detected_defects = ?, recommendations = ?, processed_at = ?
+        WHERE id = ?;
+        """, (score, warning, json.dumps(parsed_defects), json.dumps(recommendations), processed_at, task_id))
+        conn.commit()
+        conn.close()
     except Exception as e:
-        TASKS_DB[task_id].update({
-            "status": "failed",
-            "error_message": str(e),
-            "score": 0.0,
-            "detected_defects": [],
-            "recommendations": ["Inspection failed due to an image processing error."],
-            "processed_at": datetime.utcnow().isoformat() + "Z"
-        })
+        processed_at = datetime.utcnow().isoformat() + "Z"
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+        UPDATE inspection_tasks
+        SET status = 'failed', score = 0.0, lighting_warning = ?, detected_defects = '[]', recommendations = '["Inspection processing error."]', processed_at = ?
+        WHERE id = ?;
+        """, (str(e), processed_at, task_id))
+        conn.commit()
+        conn.close()
 
 @app.post("/api/v1/inspections", response_model=InspectionTaskResponse, status_code=status.HTTP_202_ACCEPTED)
 async def submit_inspection(
@@ -176,30 +207,25 @@ async def submit_inspection(
     file: UploadFile = File(...),
     module_id: str = Form("mod-soldering-basic")
 ):
-    """Async inspection submission (PRD 2 Section 7.3 & 7.4)."""
     contents = await file.read()
     nparr = np.frombuffer(contents, np.uint8)
     image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
     if image is None:
-        raise HTTPException(status_code=400, detail="Invalid image file format. Upload JPG or PNG.")
+        raise HTTPException(status_code=400, detail="Invalid image format. Upload JPG or PNG.")
 
     task_id = str(uuid.uuid4())
     created_at = datetime.utcnow().isoformat() + "Z"
 
-    TASKS_DB[task_id] = {
-        "task_id": task_id,
-        "module_id": module_id,
-        "status": "processing",
-        "score": 0.0,
-        "lighting_warning": None,
-        "detected_defects": [],
-        "recommendations": [],
-        "created_at": created_at,
-        "processed_at": created_at
-    }
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO inspection_tasks (id, module_id, status, created_at)
+    VALUES (?, ?, 'processing', ?);
+    """, (task_id, module_id, created_at))
+    conn.commit()
+    conn.close()
 
-    # Queue async processing
     background_tasks.add_task(process_inspection_task, task_id, image, module_id)
 
     return InspectionTaskResponse(
@@ -211,18 +237,25 @@ async def submit_inspection(
 
 @app.get("/api/v1/inspections/{task_id}", response_model=InspectionResultDetail)
 def get_inspection_result(task_id: str):
-    """Polling endpoint returning status, score, defects, and recommendations (PRD 2 Section 7.5)."""
-    if task_id not in TASKS_DB:
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT id, module_id, status, score, lighting_warning, detected_defects, recommendations, created_at, processed_at
+    FROM inspection_tasks WHERE id = ?;
+    """, (task_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row:
         raise HTTPException(status_code=404, detail="Inspection task not found.")
 
-    task = TASKS_DB[task_id]
     return InspectionResultDetail(
-        task_id=task["task_id"],
-        module_id=task["module_id"],
-        status=task["status"],
-        score=task["score"],
-        lighting_warning=task.get("lighting_warning"),
-        detected_defects=task.get("detected_defects", []),
-        recommendations=task.get("recommendations", []),
-        processed_at=task.get("processed_at", task["created_at"])
+        task_id=row[0],
+        module_id=row[1],
+        status=row[2],
+        score=row[3],
+        lighting_warning=row[4],
+        detected_defects=json.loads(row[5]) if row[5] else [],
+        recommendations=json.loads(row[6]) if row[6] else [],
+        processed_at=row[8] or row[7]
     )

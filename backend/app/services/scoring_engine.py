@@ -29,12 +29,26 @@ class ScoringEngine:
         "polarity_error": 20.0,
         "component_misplacement": 20.0,
         "bad_soldering": 15.0,
+        "miss_welding": 20.0,
+        "spillover": 15.0,
+        "damged": 25.0,
+        "damaged": 25.0,
+        "lack_of_part": 20.0,
+        "slug": 15.0,
+        "redundant": 15.0,
         "defect": 15.0
     }
 
     RECOMMENDATIONS_MAP = {
         "short_circuit": "Short circuit detected between adjacent copper traces/pads. Scrape excess copper or remove solder bridge using solder wick.",
         "short": "Short circuit detected on PCB trace. Clean unwanted connection with solder braid or precision knife.",
+        "miss_welding": "Titik solder tidak tersambung sempurna (miss welding / dry joint). Panaskan ulang kaki komponen dan tambahkan timah secara merata.",
+        "spillover": "Timah solder meluber keluar batas pad (solder spillover). Bersihkan kelebihan timah menggunakan solder wick / atraktor.",
+        "damged": "Kerusakan fisik terdeteksi pada jalur PCB atau pad tembaga. Periksa kontinuitas jalur menggunakan multimeter dan lakukan jumper bila terputus.",
+        "damaged": "Kerusakan fisik pada papan PCB. Lakukan penambalan jalur tembaga atau perbaikan pad yang terangkat.",
+        "lack_of_part": "Komponen belum terpasang pada pad PCB (lack of part). Pasang komponen yang sesuai dengan diagram skematik rangkaian.",
+        "slug": "Terdapat gumpalan timah sisa (solder slug / blob). Bersihkan residu timah menggunakan kuas pembersih dan alkohol IPA.",
+        "redundant": "Sisa tembaga atau serpihan timah berlebih pada area isolasi PCB. Bersihkan permukaan menggunakan pisau presisi atau solder wick.",
         "open_circuit": "Open circuit / broken trace detected. Bridge the broken copper trace using a jumper wire or feed fresh solder across the gap.",
         "open": "Open circuit / trace break detected. Solder a thin jumper wire across the broken trace.",
         "missing_component": "Missing component detected at pad location. Place the correct component according to schematic diagram and solder securely.",

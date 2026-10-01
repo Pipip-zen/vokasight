@@ -360,12 +360,7 @@ class ResultScreen extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: const Color(0xFFF0FDF4),
                         borderRadius: BorderRadius.circular(10),
-                        border: const Border(
-                          left: BorderSide(color: AppColors.success, width: 4),
-                          top: BorderSide(color: Color(0xFFDCFCE7)),
-                          right: BorderSide(color: Color(0xFFDCFCE7)),
-                          bottom: BorderSide(color: Color(0xFFDCFCE7)),
-                        ),
+                        border: Border.all(color: const Color(0xFF86EFAC), width: 1),
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,

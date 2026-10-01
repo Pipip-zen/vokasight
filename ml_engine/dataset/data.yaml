@@ -2,6 +2,6 @@ names:
   0: good_soldering
   1: solder_bridge
   2: void
-path: D:\PROYEK MANDIRI\HACKATHON\compvis\dataset
+path: d:\My App\Projek Mobile\vokasight\vokasight\ml_engine\dataset
 train: train/images
 val: valid/images

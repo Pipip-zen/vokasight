@@ -3,7 +3,12 @@ import cv2
 import base64
 import requests
 import numpy as np
+from pathlib import Path
+from dotenv import load_dotenv
 from typing import List, Dict, Any, Optional
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 class RoboflowHostedInference:
     """
@@ -12,26 +17,35 @@ class RoboflowHostedInference:
     """
 
     MODULE_MODEL_MAP = {
-        "mod-soldering-basic": {"workspace": "fyp-fjnfe", "model_id": "soldering-defect-good-condition", "version": 1},
-        "mod-min-sys-avr": {"workspace": "fyp-fjnfe", "model_id": "soldering-defect-good-condition", "version": 1},
-        "mod-power-supply": {"workspace": "fyp-fjnfe", "model_id": "soldering-defect-good-condition", "version": 1},
+        "mod-soldering-basic": {"workspace": "nbmachinevision", "model_id": "pcb-defect-vagef", "version": 1},
+        "mod-min-sys-avr": {"workspace": "nbmachinevision", "model_id": "pcb-defect-vagef", "version": 1},
+        "mod-power-supply": {"workspace": "nbmachinevision", "model_id": "pcb-defect-vagef", "version": 1},
         "mod-pcb-defect-general": {"workspace": "nbmachinevision", "model_id": "pcb-defect-vagef", "version": 1},
         "mod-nbcm-soldering": {"workspace": "sazeh", "model_id": "nbcm-soldering-defect", "version": 1}
     }
 
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv("ROBOFLOW_API_KEY")
+        self.api_key = api_key
+
+    def get_api_key(self) -> Optional[str]:
+        if self.api_key and self.api_key.strip():
+            return self.api_key.strip()
+        load_dotenv(os.path.join(BASE_DIR, ".env"))
+        return os.getenv("ROBOFLOW_API_KEY")
 
     def is_configured(self) -> bool:
-        return bool(self.api_key and self.api_key.strip())
+        key = self.get_api_key()
+        return bool(key and key.strip())
 
     def predict_image(
         self,
         image: np.ndarray,
         module_id: str = "mod-soldering-basic",
-        confidence: float = 0.35
+        confidence: float = 0.20
     ) -> Optional[List[Dict[str, Any]]]:
-        if not self.is_configured():
+        api_key = self.get_api_key()
+        if not api_key:
+            print("[ROBOFLOW] API Key not configured, skipping cloud inference.")
             return None
 
         model_config = self.MODULE_MODEL_MAP.get(module_id, self.MODULE_MODEL_MAP["mod-soldering-basic"])
@@ -45,16 +59,17 @@ class RoboflowHostedInference:
 
             url = f"https://detect.roboflow.com/{model_id}/{version}"
             params = {
-                "api_key": self.api_key.strip(),
+                "api_key": api_key,
                 "confidence": confidence
             }
+            print(f"[ROBOFLOW] Querying {url} (confidence={confidence})...")
 
             response = requests.post(
                 url,
                 params=params,
                 data=img_b64,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
-                timeout=6.0
+                timeout=10.0
             )
 
             if response.status_code == 200:

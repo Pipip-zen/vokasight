@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, Optional
 
 class ImagePreprocessor:
     """
@@ -28,6 +28,33 @@ class ImagePreprocessor:
         glare_mask = cv2.dilate(glare_mask, kernel, iterations=1)
         inpainted = cv2.inpaint(image, glare_mask, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
         return inpainted
+
+    def detect_burn_or_charring(self, image: np.ndarray) -> Optional[Dict[str, Any]]:
+        """
+        Detects catastrophic burnt craters / charring / board blowout on PCB.
+        """
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        h, w = gray.shape
+        total_pixels = h * w
+
+        # Burnt / charred regions are significantly dark and clustered
+        _, dark_mask = cv2.threshold(gray, 45, 255, cv2.THRESH_BINARY_INV)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        dark_mask = cv2.morphologyEx(dark_mask, cv2.MORPH_CLOSE, kernel)
+
+        contours, _ = cv2.findContours(dark_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            # If a connected charred burnt area takes > 0.5% of total image
+            if area > (total_pixels * 0.005):
+                x, y, bw, bh = cv2.boundingRect(cnt)
+                return {
+                    "class_name": "damged",
+                    "confidence": 0.95,
+                    "bbox": [float(x), float(y), float(x + bw), float(y + bh)],
+                    "source": "opencv_burn_analyzer"
+                }
+        return None
 
     def validate_pcb_structure(self, image: np.ndarray) -> bool:
         """

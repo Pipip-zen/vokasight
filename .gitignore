@@ -35,6 +35,7 @@ dataset/train/
 dataset/valid/
 dataset/test/
 dataset/labels.cache
+*.cache
 *.log
 
 # Environment & IDE

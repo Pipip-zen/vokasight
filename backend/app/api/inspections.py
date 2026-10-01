@@ -47,7 +47,7 @@ def process_inspection_task(task_id: str, image: np.ndarray, module_id: str, rob
         # Jalur A: Try Roboflow Hosted API if Key Provided
         cloud_engine = RoboflowHostedInference(api_key=roboflow_key) if roboflow_key else roboflow_cloud
         if cloud_engine.is_configured():
-            cloud_detections = cloud_engine.predict_image(processed_img, module_id=module_id, confidence=0.20)
+            cloud_detections = cloud_engine.predict_image(processed_img, module_id=module_id, confidence=0.50)
             if cloud_detections is not None:
                 detections = cloud_detections
                 inference_source = "roboflow_hosted_api"
@@ -56,7 +56,7 @@ def process_inspection_task(task_id: str, image: np.ndarray, module_id: str, rob
         if not detections and inference_source == "local_yolov8":
             model = get_yolo_model_for_module(module_id)
             if model is not None:
-                results = model.predict(processed_img, conf=0.20)
+                results = model.predict(processed_img, conf=0.35)
                 for r in results:
                     for box in r.boxes:
                         cls_id = int(box.cls[0])
@@ -69,11 +69,6 @@ def process_inspection_task(task_id: str, image: np.ndarray, module_id: str, rob
                             "bbox": xyxy,
                             "source": "local_yolov8"
                         })
-
-        # Check for catastrophic burn / charring damage via OpenCV
-        burn_defect = preprocessor.detect_burn_or_charring(image)
-        if burn_defect:
-            detections.append(burn_defect)
 
         warning = quality_report.get("warning") if quality_report.get("is_suboptimal") else None
         is_pcb = quality_report.get("is_pcb", True)

@@ -40,36 +40,36 @@ class ScoringEngine:
     }
 
     RECOMMENDATIONS_MAP = {
-        "short_circuit": "Short circuit detected between adjacent copper traces/pads. Scrape excess copper or remove solder bridge using solder wick.",
-        "short": "Short circuit detected on PCB trace. Clean unwanted connection with solder braid or precision knife.",
-        "miss_welding": "Titik solder tidak tersambung sempurna (miss welding / dry joint). Panaskan ulang kaki komponen dan tambahkan timah secara merata.",
-        "spillover": "Timah solder meluber keluar batas pad (solder spillover). Bersihkan kelebihan timah menggunakan solder wick / atraktor.",
-        "damged": "Kerusakan fisik terdeteksi pada jalur PCB atau pad tembaga. Periksa kontinuitas jalur menggunakan multimeter dan lakukan jumper bila terputus.",
-        "damaged": "Kerusakan fisik pada papan PCB. Lakukan penambalan jalur tembaga atau perbaikan pad yang terangkat.",
+        "short_circuit": "Hubungan singkat (short circuit) terdeteksi antar jalur/kaki komponen. Bersihkan jembatan timah solder menggunakan solder wick (pita tembaga desoldering) atau pompa atraktor timah.",
+        "short": "Hubungan singkat (short circuit) terdeteksi pada jalur PCB. Periksa jarak isolasi antar jalur dan serap kelebihan timah dengan solder wick.",
+        "miss_welding": "Titik solder tidak tersambung sempurna (miss welding / dry joint). Panaskan ulang kaki komponen dan tambahkan timah berinti fluks secara merata.",
+        "spillover": "Timah solder meluber keluar batas pad (solder spillover). Bersihkan kelebihan timah menggunakan solder wick / atraktor agar tidak menyentuh jalur lain.",
+        "damged": "Kerusakan fisik / jalur terputus terdeteksi pada PCB. Periksa kontinuitas jalur menggunakan multimeter dan lakukan pemasangan jumper bila terputus.",
+        "damaged": "Kerusakan fisik pada papan PCB. Lakukan penambalan jalur tembaga atau perbaikan pad solder yang terangkat.",
         "lack_of_part": "Komponen belum terpasang pada pad PCB (lack of part). Pasang komponen yang sesuai dengan diagram skematik rangkaian.",
-        "slug": "Terdapat gumpalan timah sisa (solder slug / blob). Bersihkan residu timah menggunakan kuas pembersih dan alkohol IPA.",
+        "slug": "Terdapat gumpalan timah sisa (solder slug / blob). Bersihkan residu timah menggunakan kuas pembersih dan alkohol isopropil (IPA).",
         "redundant": "Sisa tembaga atau serpihan timah berlebih pada area isolasi PCB. Bersihkan permukaan menggunakan pisau presisi atau solder wick.",
-        "open_circuit": "Open circuit / broken trace detected. Bridge the broken copper trace using a jumper wire or feed fresh solder across the gap.",
-        "open": "Open circuit / trace break detected. Solder a thin jumper wire across the broken trace.",
-        "missing_component": "Missing component detected at pad location. Place the correct component according to schematic diagram and solder securely.",
-        "missing": "Component missing from PCB pad. Solder required component onto designated pad.",
-        "spur": "Copper spur defect detected on trace edge. Trim unwanted copper protrusion to prevent micro-shorts.",
-        "mousebite": "Mousebite / nick defect detected on PCB trace edge. Check trace width continuity and reinforce trace with solder if necessary.",
-        "mouse_bite": "Nick / mousebite defect on trace edge. Reinforce copper trace width using thin solder layer.",
-        "pin_hole": "Pin hole defect detected in copper pad/joint. Reheat pad and feed fresh rosin-core solder to seal cavity.",
-        "hole": "Pin hole / cavity defect detected. Reheat joint and feed fresh solder to fill pinhole.",
-        "copper_residue": "Copper residue defect detected between traces. Clean PCB board thoroughly with IPA alcohol or etch away excess copper.",
-        "copper": "Unwanted copper residue detected. Inspect isolation gap between adjacent traces.",
-        "bridge": "Solder bridge detected between pins. Apply flux and reheat joint with soldering iron tip to break unwanted connection.",
-        "solder_bridge": "Solder bridge detected. Clean excess solder using solder braid / wick and re-apply flux.",
-        "void": "Void / cavity detected in solder joint. Reheat pad and feed small amount of rosin-core solder to fill joint completely.",
-        "cold_joint": "Cold solder joint detected (dull/grainy surface). Reheat joint until solder flows smoothly and forms shiny concave fillet.",
-        "insufficient_solder": "Insufficient solder on pad. Add rosin-core solder until smooth concave cone shape is formed around pin.",
-        "excess_solder": "Excess solder blob detected. Remove surplus solder using solder pump or wick.",
-        "polarity_error": "Component polarity misaligned (e.g. electrolytic capacitor / diode / IC pin 1). Desolder component and orient correctly before resoldering.",
-        "component_misplacement": "Component misaligned or shifted from pad center. Reheat pads and adjust alignment using precision tweezers.",
-        "bad_soldering": "Defective soldering joint detected. Re-flow joint with soldering iron and fresh flux.",
-        "defect": "PCB / soldering defect detected. Re-inspect pad connection and touch up assembly."
+        "open_circuit": "Jalur rangkaian terputus (open circuit). Sambungkan kembali jalur menggunakan kawat jumper tembaga halus atau solder ulang.",
+        "open": "Jalur tembaga terputus. Hubungkan titik yang putus menggunakan kawat jumper tembaga.",
+        "missing_component": "Komponen belum terpasang pada pad PCB. Pasang komponen yang tepat sesuai petunjuk modul praktik dan solder dengan kokoh.",
+        "missing": "Komponen hilang atau belum tersolder. Pasang komponen yang sesuai pada posisi pad rangkaian.",
+        "spur": "Tonjolan tembaga berlebih (spur) pada tepi jalur PCB. Rapikan tepi jalur dengan pisau cutter presisi untuk mencegah korsleting mikro.",
+        "mousebite": "Cacat gigitan (mousebite / retakan) pada tepi jalur. Periksa kontinuitas jalur dan perkuat dengan lapisan timah solder tipis bila perlu.",
+        "mouse_bite": "Retakan pada tepi jalur tembaga PCB. Perkuat lebar jalur menggunakan lapisan solder tipis.",
+        "pin_hole": "Lubang jarum (pin hole) pada permukaan sambungan timah. Panaskan kembali pad dan tambahkan sedikit timah fluks untuk menutup rongga.",
+        "hole": "Rongga atau lubang jarum pada solderan. Panaskan kembali titik solder dan tambahkan timah segar.",
+        "copper_residue": "Residu tembaga liar terdeteksi di antara jalur PCB. Bersihkan papan rangkaian secara menyeluruh dengan alkohol IPA.",
+        "copper": "Residu tembaga atau serbuk logam tak diinginkan. Periksa celah isolasi antar jalur PCB.",
+        "bridge": "Jembatan solder (solder bridge) antar pin kaki komponen. Berikan fluks dan panaskan kaki komponen dengan mata solder untuk memutus jembatan timah.",
+        "solder_bridge": "Jembatan solder terdeteksi antar pin. Bersihkan kelebihan timah menggunakan solder wick / atraktor dan oleskan fluks pembersih.",
+        "void": "Rongga udara (void / rongga kosong) pada timah solder. Panaskan kembali sambungan sampai timah mencair rata dan mengisi pad secara menyeluruh.",
+        "cold_joint": "Sambungan solder dingin (cold joint / buram berbutir). Panaskan ulang sambungan dengan solder panas hingga timah mengkilap dan berbentuk kerucut cekung.",
+        "insufficient_solder": "Jumlah timah solder kurang pada pad komponen. Tambahkan timah solder berinti fluks sampai membentuk fillet cekung yang mengikat kuat.",
+        "excess_solder": "Timah solder terlalu tebal / menggumpal. Sedot kelebihan timah menggunakan desoldering pump atau solder wick.",
+        "polarity_error": "Polaritas orientasi komponen terbalik (misal: elco, dioda, IC). Lepas solderan komponen dan pasang kembali sesuai orientasi pin 1 yang tepat.",
+        "component_misplacement": "Posisi komponen bergeser / miring dari pusat pad. Panaskan pad dan luruskan posisi komponen menggunakan pinset presisi.",
+        "bad_soldering": "Kualitas penyolderan kurang baik. Lakukan reflow pemanasan ulang dengan bantuan sedikit fluks solder.",
+        "defect": "Cacat hardware / solderan terdeteksi. Periksa kembali sambungan pada area yang ditandai dan lakukan touch-up penyolderan."
     }
 
     def evaluate(
@@ -130,8 +130,8 @@ class ScoringEngine:
         final_score = max(0.0, min(100.0, base_score))
 
         if not parsed_defects and not preprocessor_warning:
-            recommendations.append("Excellent work! PCB assembly meets quality standards. No physical defects detected.")
+            recommendations.append("Sempurna! Kualitas perakitan dan penyolderan PCB telah memenuhi standar lab vokasi. Tidak ada cacat terdeteksi.")
         elif preprocessor_warning:
-            recommendations.insert(0, f"Warning: {preprocessor_warning}")
+            recommendations.insert(0, f"Perhatian: {preprocessor_warning}")
 
         return round(final_score, 1), parsed_defects, recommendations

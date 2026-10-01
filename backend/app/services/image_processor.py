@@ -32,25 +32,37 @@ class ImagePreprocessor:
     def detect_burn_or_charring(self, image: np.ndarray) -> Optional[Dict[str, Any]]:
         """
         Detects catastrophic burnt craters / charring / board blowout on PCB.
+        Avoids false positives on normal rectangular black IC packages and SMD chips.
         """
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         h, w = gray.shape
         total_pixels = h * w
 
-        # Burnt / charred regions are significantly dark and clustered
-        _, dark_mask = cv2.threshold(gray, 45, 255, cv2.THRESH_BINARY_INV)
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        # Charred burn craters are extremely dark (gray < 35)
+        _, dark_mask = cv2.threshold(gray, 35, 255, cv2.THRESH_BINARY_INV)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
         dark_mask = cv2.morphologyEx(dark_mask, cv2.MORPH_CLOSE, kernel)
 
         contours, _ = cv2.findContours(dark_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            # If a connected charred burnt area takes > 0.5% of total image
-            if area > (total_pixels * 0.005):
+            # Must be a substantial damaged region (> 0.8% of image)
+            if area > (total_pixels * 0.008):
                 x, y, bw, bh = cv2.boundingRect(cnt)
+                rect_area = float(bw * bh)
+                if rect_area <= 0:
+                    continue
+
+                rect_fill = area / rect_area
+
+                # Standard IC chips and SMD packages are rectangular (rect_fill >= 0.65)
+                # Burnt holes / craters are ragged, amorphous, and non-rectangular (rect_fill < 0.60)
+                if rect_fill >= 0.65:
+                    continue
+
                 return {
                     "class_name": "damged",
-                    "confidence": 0.95,
+                    "confidence": 0.90,
                     "bbox": [float(x), float(y), float(x + bw), float(y + bh)],
                     "source": "opencv_burn_analyzer"
                 }

@@ -1,7 +1,11 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
+# Load .env file automatically if present
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
 DB_PATH = os.path.join(BASE_DIR, "vokasight.db")
 
 LOCAL_MODULE_WEIGHTS_MAP = {

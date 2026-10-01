@@ -47,7 +47,7 @@ def process_inspection_task(task_id: str, image: np.ndarray, module_id: str, rob
         # Jalur A: Try Roboflow Hosted API if Key Provided
         cloud_engine = RoboflowHostedInference(api_key=roboflow_key) if roboflow_key else roboflow_cloud
         if cloud_engine.is_configured():
-            cloud_detections = cloud_engine.predict_image(processed_img, module_id=module_id, confidence=0.50)
+            cloud_detections = cloud_engine.predict_image(processed_img, module_id=module_id)
             if cloud_detections is not None:
                 detections = cloud_detections
                 inference_source = "roboflow_hosted_api"

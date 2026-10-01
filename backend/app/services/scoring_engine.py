@@ -36,7 +36,9 @@ class ScoringEngine:
         "lack_of_part": 20.0,
         "slug": 15.0,
         "redundant": 15.0,
-        "defect": 15.0
+        "defect": 15.0,
+        "missing_hole": 20.0,
+        "spurious_copper": 15.0
     }
 
     RECOMMENDATIONS_MAP = {
@@ -69,7 +71,9 @@ class ScoringEngine:
         "polarity_error": "Polaritas orientasi komponen terbalik (misal: elco, dioda, IC). Lepas solderan komponen dan pasang kembali sesuai orientasi pin 1 yang tepat.",
         "component_misplacement": "Posisi komponen bergeser / miring dari pusat pad. Panaskan pad dan luruskan posisi komponen menggunakan pinset presisi.",
         "bad_soldering": "Kualitas penyolderan kurang baik. Lakukan reflow pemanasan ulang dengan bantuan sedikit fluks solder.",
-        "defect": "Cacat hardware / solderan terdeteksi. Periksa kembali sambungan pada area yang ditandai dan lakukan touch-up penyolderan."
+        "defect": "Cacat hardware / solderan terdeteksi. Periksa kembali sambungan pada area yang ditandai dan lakukan touch-up penyolderan.",
+        "missing_hole": "Lubang pin/komponen PCB hilang atau tertutup (missing hole). Lakukan pengeboran ulang atau bersihkan sumbatan timah pada lubang pad/via.",
+        "spurious_copper": "Residu tembaga liar (spurious copper) di antara jalur isolasi PCB. Bersihkan dan kerik lapisan tembaga liar menggunakan pisau presisi."
     }
 
     def evaluate(

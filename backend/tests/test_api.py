@@ -1,8 +1,15 @@
+import sys
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(BASE_DIR))
+
 import cv2
 import numpy as np
 import time
 from fastapi.testclient import TestClient
-from src.backend.main import app
+from backend.main import app
 
 def test_api_endpoints():
     client = TestClient(app)
@@ -52,7 +59,7 @@ def test_api_endpoints():
     print("Polling result recommendations:", poll_res.get("recommendations"))
     assert poll_res.get("status") == "completed", "Polling processing did not complete!"
 
-    print("\nAll PRD 2 FastAPI Endpoint Tests PASSED!")
+    print("\nAll Modular FastAPI Endpoint Tests PASSED!")
 
 if __name__ == "__main__":
     test_api_endpoints()

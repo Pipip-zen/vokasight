@@ -1,134 +1,97 @@
-# VokaSight MVP - Hardware & Soldering Defect Inspection Engine
+# VokaSight - Automated Hardware Inspection Engine & Mobile API Backend
 
-Vision-Based Automated Hardware & Digital Design Inspection Engine for Vocational Lab Practicum.
+Vision-Based Automated Hardware & Digital Design Inspection Engine for Vocational Lab Practicum (PRD 2 Architecture).
 
 ## 📌 Project Overview
-VokaSight provides an automated computer vision inspection pipeline to evaluate physical hardware assemblies (soldering defects, short circuits, voids, component orientation, and polarity). Students receive real-time numerical scores and actionable repair instructions prior to official lab instructor grading.
+VokaSight provides an automated computer vision inspection pipeline to evaluate physical hardware assemblies (soldering defects, short circuits, voids, component orientation, and polarity). 
+
+This FastAPI backend serves as the **mobile API server for Flutter / Mobile applications** and web clients, delivering real-time numerical scores and actionable repair instructions.
 
 ---
 
-## 🏗️ Architecture & Features
+## 📂 Modular Project Structure
 
 ```
-          +-----------------------+
-          |  Student Mobile App   |
-          |  (NIM Authentication) |
-          +-----------+-----------+
-                      | Upload Image
-                      v
-      +-------------------------------+
-      |   FastAPI Backend Server      |
-      |   (http://localhost:8000)     |
-      +---------------+---------------+
-                      |
-        +-------------+-------------+
-        |                           |
-        v                           v
-+------------------+     +-----------------------+
-|  OpenCV Preproc  |     |   YOLOv8-Nano Engine  |
-|  - CLAHE Contrast|     |   - Soldering Bridge  |
-|  - Glare Reduction     |   - Void & Short      |
-|  - Lighting Check|     |   - Polarity Error    |
-+---------+--------+     +-----------+-----------+
-          |                         |
-          +------------+------------+
-                       |
-                       v
-            +--------------------+
-            |   Scoring Engine   |
-            |   (Score 0 - 100)  |
-            +---------+----------+
-                      | JSON Response
-                      v
-            +--------------------+
-            | Score & Actionable |
-            | Repair Advice      |
-            +--------------------+
+compvis/
+├── backend/                    # Core FastAPI Backend API (Serves Mobile Apps & Web Clients)
+│   ├── app/
+│   │   ├── api/                # REST API Routers & Endpoints
+│   │   │   ├── health.py       # Health check & system status
+│   │   │   ├── modules.py      # Practicum modules catalog (Zero-Auth)
+│   │   │   └── inspections.py  # Async inspection submission & status polling
+│   │   ├── core/               # Configuration & SQLite Database Engine
+│   │   │   ├── config.py
+│   │   │   └── database.py
+│   │   ├── services/           # Computer Vision & Scoring Logic
+│   │   │   ├── image_processor.py # OpenCV CLAHE & Glare Reduction
+│   │   │   └── scoring_engine.py  # Penalty-based scoring & repair advice
+│   │   └── schemas/            # Pydantic Schemas
+│   │       ├── module.py
+│   │       └── inspection.py
+│   ├── tests/                  # Unit & Integration Tests
+│   │   ├── test_api.py
+│   │   └── test_pipeline.py
+│   └── main.py                 # FastAPI Application Entry Point
+├── ml_engine/                  # Machine Learning & YOLOv8 Training Pipeline
+│   ├── train.py                # YOLOv8 training script
+│   ├── generate_synthetic.py   # Synthetic test dataset generator
+│   ├── weights/                # Trained YOLOv8 model weights (best.pt)
+│   └── dataset/                # Dataset directory & data.yaml
+├── demo_ui/                    # Streamlit Interactive Web & Mobile Demo UI
+│   └── app.py
+├── docs/                       # Product Requirements Documents (PRD 1 & PRD 2)
+│   ├── prd_vokasight_mvp.md
+│   └── prd_vokasight_mvp_2.md
+├── vokasight.db                # SQLite Persistent Database
+├── .gitignore
+└── README.md
 ```
 
-### Key Modules:
-- **`src/preprocessing/image_processor.py`**: OpenCV pipeline implementing CLAHE (Contrast Limited Adaptive Histogram Equalization) in LAB color space, specular glare reduction, and lighting quality checks (too dark / overexposed).
-- **`src/model/train_yolo.py`**: YOLOv8-Nano object detection pipeline supporting Roboflow Universe dataset downloads and custom model training.
-- **`src/backend/scoring_engine.py`**: Automated scoring calculator (0-100 scale) with weighted defect penalties and targeted repair recommendations.
-- **`src/backend/main.py`**: FastAPI application exposing endpoints for student authentication (`/api/v1/auth/student`) and hardware image inspection (`/api/v1/inspect/hardware`).
+---
+
+## 📱 Mobile App Backend Capabilities
+
+FastAPI exposes standard REST endpoints for mobile app clients (Flutter, React Native, Swift, Kotlin):
+
+### 1. `GET /api/v1/modules`
+Returns list of active practicum modules for Zero-Auth selection (PRD 2 Section 7.2).
+
+### 2. `POST /api/v1/inspections` (Async Submission)
+Accepts `multipart/form-data` with image file and `module_id`. Returns HTTP 202 Accepted with `task_id` and status `processing`.
+
+### 3. `GET /api/v1/inspections/{task_id}` (Polling Endpoint)
+Returns inspection result details once status is `completed`:
+- Numerical Score (0–100)
+- Defect bounding box coordinates & confidence scores
+- Actionable step-by-step repair recommendations
+- Suboptimal lighting alerts (if overexposed or too dark)
 
 ---
 
 ## 🚀 Quick Start Guide
 
-### 1. Install Dependencies
+### 1. Run FastAPI Mobile Backend Server
 ```bash
-pip install torch torchvision ultralytics roboflow opencv-python fastapi uvicorn python-multipart
+python backend/main.py
+# or
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+```
+- Interactive Swagger API Documentation: `http://localhost:8000/docs`
+
+### 2. Run Streamlit Interactive Demo Client
+```bash
+streamlit run demo_ui/app.py
+```
+- Web UI Client: `http://localhost:8501`
+
+### 3. Run Automated Tests
+```bash
+python backend/tests/test_pipeline.py
+python backend/tests/test_api.py
 ```
 
-### 2. Prepare Dataset & Train YOLOv8 Model
-
-#### Option A: Download from Roboflow Universe
-Download the [Soldering Defect Dataset](https://universe.roboflow.com/fyp-fjnfe/soldering-defect-good-condition) using your Roboflow API key:
+### 4. Train YOLOv8-Nano Model
 ```bash
-python src/model/train_yolo.py --roboflow_key YOUR_ROBOFLOW_API_KEY --epochs 50 --batch 16
-```
-
-#### Option B: Test with Synthetic Dataset
-Generate a sample dataset for instant local training:
-```bash
-python src/model/generate_sample_dataset.py
-python src/model/train_yolo.py --data dataset/data.yaml --epochs 10 --batch 4
-```
-
-### 3. Run FastAPI Backend Server
-```bash
-uvicorn src.backend.main:app --reload --host 0.0.0.0 --port 8000
-```
-Interactive Swagger API Docs will be available at: `http://localhost:8000/docs`
-
----
-
-## 🧪 Verification & Testing
-
-Run pipeline and API unit tests:
-```bash
-# Test Image Preprocessor & Scoring Engine
-python test_pipeline.py
-
-# Test FastAPI Endpoints
-python test_api.py
-```
-
----
-
-## 📊 API Specification
-
-### `POST /api/v1/auth/student`
-Authenticates student using Student ID (NIM).
-- **Payload:** `{"student_id": "5324600006", "full_name": "Rian Hardware Student"}`
-- **Response:** `{"student_id": "5324600006", "session_id": "...", "message": "Authentication successful..."}`
-
-### `POST /api/v1/inspect/hardware`
-Uploads PCB photo for automated defect inspection.
-- **Form Data:**
-  - `file`: Multipart image file (`.jpg` or `.png`)
-  - `student_id`: `"5324600006"`
-  - `module_type`: `"hardware_soldering"`
-- **Response Structure:**
-```json
-{
-  "task_id": "a40cb786-aafa-4004-85e8-fc3a8dfb1376",
-  "student_id": "5324600006",
-  "module_type": "hardware_soldering",
-  "score": 75.0,
-  "lighting_warning": null,
-  "detected_defects": [
-    {
-      "class_name": "solder_bridge",
-      "confidence": 0.91,
-      "penalty": 25.0,
-      "bbox": [100.0, 100.0, 150.0, 150.0]
-    }
-  ],
-  "recommendations": [
-    "Solder bridge detected between pins. Apply flux and reheat joint with soldering iron tip to break unwanted connection."
-  ],
-  "processed_at": "2026-10-01T13:22:53Z"
-}
+# Train on custom Roboflow dataset
+python ml_engine/train.py --roboflow_key YOUR_ROBOFLOW_API_KEY --epochs 50 --batch 16
 ```

@@ -1,18 +1,22 @@
+import sys
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(BASE_DIR))
+
 import cv2
 import numpy as np
 import json
-from src.preprocessing.image_processor import ImagePreprocessor
-from src.backend.scoring_engine import ScoringEngine
+from backend.app.services.image_processor import ImagePreprocessor
+from backend.app.services.scoring_engine import ScoringEngine
 
 def run_test():
     print("=== Testing ImagePreprocessor ===")
     preprocessor = ImagePreprocessor()
 
-    # Create synthetic test PCB image with high contrast and bright spot
     test_img = np.zeros((480, 640, 3), dtype=np.uint8)
-    # Add background texture
     test_img[:, :] = (50, 80, 50)
-    # Add shiny solder joint spot (simulated glare)
     cv2.circle(test_img, (320, 240), 40, (255, 255, 255), -1)
 
     processed_img, quality = preprocessor.process(test_img)

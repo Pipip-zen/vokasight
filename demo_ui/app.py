@@ -1,17 +1,25 @@
+import sys
+import os
+from pathlib import Path
+
+# Add project root to sys.path
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR))
+
 import streamlit as st
 import cv2
 import numpy as np
-import requests
-import json
 import time
 from PIL import Image
 
-from src.preprocessing.image_processor import ImagePreprocessor
-from src.backend.scoring_engine import ScoringEngine
-from src.backend.main import get_yolo_model, find_weights, preprocessor, scoring_engine, PRACTICUM_MODULES
+from backend.app.services.image_processor import ImagePreprocessor
+from backend.app.services.scoring_engine import ScoringEngine
+from backend.app.core.config import find_weights
+from backend.app.api.inspections import get_yolo_model
+from backend.app.core.database import get_db_connection
 
 st.set_page_config(
-    page_title="VokaSight - Hardware Defect Inspection (PRD 2)",
+    page_title="VokaSight - Hardware Defect Inspection (Mobile Backend Connected)",
     page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -67,19 +75,30 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Sidebar - PRD 2 Module Selection & Zero Auth
-st.sidebar.image("https://img.icons8.com/color/96/integrated-circuit.png", width=70)
-st.sidebar.title("VokaSight Student Portal")
-st.sidebar.markdown("<span class='zero-auth-badge'>⚡ Zero-Auth Mode Enabled</span>", unsafe_allow_html=True)
-st.sidebar.caption("PRD 2 Spec: Direct Access & Async AI Pipeline")
+# Fetch Practicum Modules from DB
+def fetch_modules():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, description FROM modules;")
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"id": r["id"], "name": r["name"], "description": r["description"]} for r in rows]
 
-# PRD 2 Module Selection
-module_options = {mod["name"]: mod["id"] for mod in PRACTICUM_MODULES}
+practicum_modules = fetch_modules()
+preprocessor = ImagePreprocessor()
+scoring_engine = ScoringEngine()
+
+# Sidebar
+st.sidebar.image("https://img.icons8.com/color/96/integrated-circuit.png", width=70)
+st.sidebar.title("VokaSight Mobile Portal")
+st.sidebar.markdown("<span class='zero-auth-badge'>📱 Mobile App API Backend Ready</span>", unsafe_allow_html=True)
+st.sidebar.caption("PRD 2 Modular Architecture")
+
+module_options = {mod["name"]: mod["id"] for mod in practicum_modules}
 selected_module_name = st.sidebar.selectbox("🎯 Target Practicum Module", list(module_options.keys()))
 selected_module_id = module_options[selected_module_name]
 
-# Show selected module description
-for mod in PRACTICUM_MODULES:
+for mod in practicum_modules:
     if mod["id"] == selected_module_id:
         st.sidebar.info(f"**Module Description:**\n{mod['description']}")
 
@@ -91,7 +110,7 @@ model = get_yolo_model()
 if model is not None:
     st.sidebar.success(f"YOLOv8-Nano Model Active\n\n`{model_path}`")
 else:
-    st.sidebar.warning("Model running in heuristic fallback mode")
+    st.sidebar.warning("Model running in fallback mode")
 
 st.sidebar.divider()
 st.sidebar.markdown("📦 **GitHub Repository:**")
@@ -99,7 +118,7 @@ st.sidebar.markdown("[github.com/Pipip-zen/vokasight.git](https://github.com/Pip
 
 # Main Header
 st.markdown("<div class='main-header'>🔍 VokaSight Hardware Inspection Engine</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub-header'>Automated Soldering & Assembly Quality Assessment (PRD 2 Specification)</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-header'>Automated Soldering & Quality Inspection Engine (FastAPI Mobile Backend Connected)</div>", unsafe_allow_html=True)
 
 col1, col2 = st.columns([1, 1])
 
@@ -107,10 +126,10 @@ uploaded_file = None
 
 with col1:
     st.subheader("1. Gallery / Camera Image Input")
-    input_method = st.radio("Select Input Source", ["Gallery Photo Upload (PRD 2 Spec)", "Live Webcam Capture"], horizontal=True)
+    input_method = st.radio("Select Input Source", ["Gallery Photo Upload (Flutter Picker Spec)", "Live Webcam Capture"], horizontal=True)
 
-    if input_method == "Gallery Photo Upload (PRD 2 Spec)":
-        uploaded_file = st.file_uploader("Choose PCB Image from Device Gallery", type=["jpg", "jpeg", "png"])
+    if input_method == "Gallery Photo Upload (Flutter Picker Spec)":
+        uploaded_file = st.file_uploader("Choose PCB Image from Gallery", type=["jpg", "jpeg", "png"])
     else:
         uploaded_file = st.camera_input("Capture PCB Photo")
 
@@ -127,10 +146,8 @@ with col2:
         with st.spinner("Executing OpenCV pre-processing & YOLOv8 inference..."):
             start_time = time.time()
 
-            # 1. OpenCV Pre-processing
             processed_img, quality = preprocessor.process(image)
             
-            # 2. YOLOv8 Model Inference
             detections = []
             annotated_img = image.copy()
 
@@ -149,7 +166,6 @@ with col2:
                             "bbox": xyxy
                         })
 
-                        # Color coding
                         color = (0, 0, 255) if "bridge" in cls_name or "short" in cls_name else (0, 255, 255)
                         if "good" in cls_name:
                             color = (0, 255, 0)
@@ -159,39 +175,33 @@ with col2:
                         cv2.putText(annotated_img, f"{cls_name} {conf:.2f}", (x1, max(15, y1 - 10)),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
             
-            # 3. Penalty-Based Scoring (PRD 2 Spec)
             warning = quality.get("warning") if quality.get("is_suboptimal") else None
             score, parsed_defects, recommendations = scoring_engine.evaluate(detections, preprocessor_warning=warning)
             latency = round((time.time() - start_time) * 1000, 1)
 
-            # Tab View for Visualizations
             tab1, tab2 = st.tabs(["🎯 AI Defect Bounding Boxes", "🔬 OpenCV CLAHE Image"])
             with tab1:
                 st.image(cv2.cvtColor(annotated_img, cv2.COLOR_BGR2RGB), caption=f"Defect Overlay ({latency} ms)", use_container_width=True)
             with tab2:
                 st.image(cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB), caption="CLAHE Contrast & Glare Normalized", use_container_width=True)
 
-            # Penalty Score Card Display (PRD 2 Section 7.5)
             st.markdown("---")
             score_color = "#16A34A" if score >= 80 else "#CA8A04" if score >= 60 else "#DC2626"
             st.markdown(f"""
             <div class='score-card'>
-                <div style='color: #64748B; font-weight: 600;'>PENALTY-BASED SCORE (PRD 2)</div>
+                <div style='color: #64748B; font-weight: 600;'>PENALTY-BASED SCORE</div>
                 <div class='score-number' style='color: {score_color};'>{score} / 100</div>
                 <div style='color: #475569; font-size: 0.9rem;'>Module: {selected_module_id} | Latency: {latency} ms</div>
             </div>
             """, unsafe_allow_html=True)
 
-            # Lighting Warning Alert
             if warning:
                 st.markdown(f"<div class='warn-box'>⚠️ <b>Lighting Alert:</b> {warning}</div>", unsafe_allow_html=True)
 
-            # Actionable Repair Recommendations (PRD 2 Section 7.5)
             st.markdown("### 📋 Actionable Repair Recommendations")
             for rec in recommendations:
                 st.markdown(f"<div class='rec-box'>💡 {rec}</div>", unsafe_allow_html=True)
 
-            # Defect Breakdown Table
             if parsed_defects:
                 st.markdown("### 🔍 Detected Defect Breakdown & Penalties")
                 st.table(parsed_defects)
@@ -200,4 +210,4 @@ with col2:
         st.info("👈 Choose a practicum module and upload a PCB photo to analyze.")
 
 st.divider()
-st.caption("VokaSight MVP Engine | PRD 2 Architecture | GitHub: https://github.com/Pipip-zen/vokasight.git")
+st.caption("VokaSight Modular Architecture | Mobile API Backend Ready | GitHub: https://github.com/Pipip-zen/vokasight.git")

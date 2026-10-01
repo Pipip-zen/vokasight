@@ -18,14 +18,9 @@ class ModuleCubit extends Cubit<ModuleState> {
       description: 'Inspeksi kualitas sambungan solder pad, void, dan deteksi solder bridge pada board latihan.',
     ),
     ModuleModel(
-      id: 'mod-min-sys-avr',
-      name: 'Praktikum Perakitan Minimum System AVR / Arduino',
-      description: 'Verifikasi orientasi IC (pin 1 notch), polaritas kapasitor elko/dioda, dan solder pin header.',
-    ),
-    ModuleModel(
-      id: 'mod-power-supply',
-      name: 'Praktikum Modul Regulator Catu Daya (Power Supply)',
-      description: 'Pemeriksaan jalur komponen regulator, dioda bridge, trafo, dan jalur sambungan PCB.',
+      id: 'mod-pcb-defect-general',
+      name: 'Praktikum Inspeksi Cacat PCB General (PCB Defect Detection)',
+      description: 'Pemeriksaan cacat fisik PCB secara menyeluruh (missing component, short/open circuit, spur, pin hole, dan sisa tembaga).',
     ),
   ];
 

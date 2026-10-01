@@ -17,9 +17,6 @@ class RoboflowHostedInference:
     - mod-pcb-defect-general: queries 'pcb-defects-dataset' (trace breaks, missing hole, mouse bite, open circuit, spur)
       plus 'pcb-defect-vagef' (solder bridge & board damage)
     - mod-soldering-basic: queries 'pcb-defect-vagef' (short circuit, spillover, cold joint, miss welding)
-    - mod-min-sys-avr: queries 'pcb-defect-vagef'
-    - mod-power-supply: queries 'pcb-defect-vagef'
-    - mod-nbcm-soldering: queries 'nbcm-soldering-defect'
     """
 
     MODULE_MODEL_MAP = {
@@ -29,15 +26,6 @@ class RoboflowHostedInference:
         ],
         "mod-soldering-basic": [
             {"model_id": "pcb-defect-vagef", "version": 1, "confidence": 0.45}
-        ],
-        "mod-min-sys-avr": [
-            {"model_id": "pcb-defect-vagef", "version": 1, "confidence": 0.45}
-        ],
-        "mod-power-supply": [
-            {"model_id": "pcb-defect-vagef", "version": 1, "confidence": 0.45}
-        ],
-        "mod-nbcm-soldering": [
-            {"model_id": "nbcm-soldering-defect", "version": 1, "confidence": 0.30}
         ]
     }
 

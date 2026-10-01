@@ -11,12 +11,14 @@ from fastapi import APIRouter, File, UploadFile, Form, HTTPException, status, Ba
 from backend.app.schemas.inspection import InspectionTaskResponse, InspectionResultDetail
 from backend.app.services.image_processor import ImagePreprocessor
 from backend.app.services.scoring_engine import ScoringEngine
+from backend.app.services.roboflow_service import RoboflowHostedInference
 from backend.app.core.config import find_weights, DB_PATH
 
 router = APIRouter()
 
 preprocessor = ImagePreprocessor()
 scoring_engine = ScoringEngine()
+roboflow_cloud = RoboflowHostedInference()
 
 yolo_model = None
 
@@ -28,31 +30,43 @@ def get_yolo_model():
             try:
                 from ultralytics import YOLO
                 yolo_model = YOLO(weights_path)
-                print(f"Loaded trained YOLOv8 model from {weights_path}")
+                print(f"Loaded trained local YOLOv8 model from {weights_path}")
             except Exception as e:
-                print(f"Failed to load YOLO model: {e}")
+                print(f"Failed to load local YOLO model: {e}")
                 yolo_model = None
     return yolo_model
 
-def process_inspection_task(task_id: str, image: np.ndarray, module_id: str):
+def process_inspection_task(task_id: str, image: np.ndarray, module_id: str, roboflow_key: Optional[str] = None):
     try:
         processed_img, quality_report = preprocessor.process(image)
-        model = get_yolo_model()
         detections = []
+        inference_source = "local_yolov8"
 
-        if model is not None:
-            results = model.predict(processed_img, conf=0.35)
-            for r in results:
-                for box in r.boxes:
-                    cls_id = int(box.cls[0])
-                    cls_name = model.names[cls_id]
-                    conf = float(box.conf[0])
-                    xyxy = [float(x) for x in box.xyxy[0]]
-                    detections.append({
-                        "class_name": cls_name,
-                        "confidence": conf,
-                        "bbox": xyxy
-                    })
+        # Jalur A: Try Roboflow Hosted API if Key Provided
+        cloud_engine = RoboflowHostedInference(api_key=roboflow_key) if roboflow_key else roboflow_cloud
+        if cloud_engine.is_configured():
+            cloud_detections = cloud_engine.predict_image(processed_img, confidence=0.35)
+            if cloud_detections is not None:
+                detections = cloud_detections
+                inference_source = "roboflow_hosted_api"
+
+        # Jalur B: Local YOLOv8 Fallback if Jalur A not used or failed
+        if not detections and inference_source == "local_yolov8":
+            model = get_yolo_model()
+            if model is not None:
+                results = model.predict(processed_img, conf=0.35)
+                for r in results:
+                    for box in r.boxes:
+                        cls_id = int(box.cls[0])
+                        cls_name = model.names[cls_id]
+                        conf = float(box.conf[0])
+                        xyxy = [float(x) for x in box.xyxy[0]]
+                        detections.append({
+                            "class_name": cls_name,
+                            "confidence": conf,
+                            "bbox": xyxy,
+                            "source": "local_yolov8"
+                        })
 
         warning = quality_report.get("warning") if quality_report.get("is_suboptimal") else None
         score, parsed_defects, recommendations = scoring_engine.evaluate(detections, preprocessor_warning=warning)
@@ -83,7 +97,8 @@ def process_inspection_task(task_id: str, image: np.ndarray, module_id: str):
 async def submit_inspection(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    module_id: str = Form("mod-soldering-basic")
+    module_id: str = Form("mod-soldering-basic"),
+    roboflow_key: Optional[str] = Form(None)
 ):
     contents = await file.read()
     nparr = np.frombuffer(contents, np.uint8)
@@ -104,7 +119,7 @@ async def submit_inspection(
     conn.commit()
     conn.close()
 
-    background_tasks.add_task(process_inspection_task, task_id, image, module_id)
+    background_tasks.add_task(process_inspection_task, task_id, image, module_id, roboflow_key)
 
     return InspectionTaskResponse(
         task_id=task_id,

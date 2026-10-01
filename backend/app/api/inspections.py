@@ -52,6 +52,7 @@ def process_inspection_task(task_id: str, image: np.ndarray, module_id: str, rob
                 detections = cloud_detections
                 inference_source = "roboflow_hosted_api"
 
+        model = None
         # Jalur B: Local YOLOv8 Fallback if Jalur A not used or failed
         if not detections and inference_source == "local_yolov8":
             model = get_yolo_model_for_module(module_id)
@@ -71,8 +72,15 @@ def process_inspection_task(task_id: str, image: np.ndarray, module_id: str, rob
                         })
 
         warning = quality_report.get("warning") if quality_report.get("is_suboptimal") else None
+        
+        # Peringatan jika kedua jalur AI (Cloud & Local) sama-sama belum aktif
+        if inference_source == "local_yolov8" and model is None and not detections:
+            ai_notice = "⚠️ AI Engine Belum Aktif: Model lokal YOLOv8 (ml_engine/weights/) belum diunduh dan Roboflow API Key belum diisi. Masukkan Roboflow API Key di menu 'Pengaturan Tambahan' pada aplikasi untuk mendeteksi cacat nyata."
+            warning = f"{warning} | {ai_notice}" if warning else ai_notice
+
         score, parsed_defects, recommendations = scoring_engine.evaluate(detections, preprocessor_warning=warning)
         processed_at = datetime.utcnow().isoformat() + "Z"
+
 
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()

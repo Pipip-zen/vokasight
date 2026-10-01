@@ -8,14 +8,15 @@ from typing import List, Dict, Any, Optional
 class RoboflowHostedInference:
     """
     Jalur A: Roboflow Hosted Inference API Service.
-    Supports multi-model querying (Soldering Defect & General PCB Defect Inspection).
+    Supports multi-model querying (Soldering Defect, PCB Defect & NBCM Soldering Inspection).
     """
 
     MODULE_MODEL_MAP = {
         "mod-soldering-basic": {"workspace": "fyp-fjnfe", "model_id": "soldering-defect-good-condition", "version": 1},
         "mod-min-sys-avr": {"workspace": "fyp-fjnfe", "model_id": "soldering-defect-good-condition", "version": 1},
         "mod-power-supply": {"workspace": "fyp-fjnfe", "model_id": "soldering-defect-good-condition", "version": 1},
-        "mod-pcb-defect-general": {"workspace": "nbmachinevision", "model_id": "pcb-defect-vagef", "version": 1}
+        "mod-pcb-defect-general": {"workspace": "nbmachinevision", "model_id": "pcb-defect-vagef", "version": 1},
+        "mod-nbcm-soldering": {"workspace": "sazeh", "model_id": "nbcm-soldering-defect", "version": 1}
     }
 
     def __init__(self, api_key: Optional[str] = None):
